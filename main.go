@@ -1,13 +1,15 @@
 package main
 
 import (
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
 	"strings"
+
+	tls "github.com/refraction-networking/utls"
 )
 
 func apiHandler(w http.ResponseWriter, r *http.Request) {
@@ -79,6 +81,30 @@ func processConn(readConn net.Conn, writeConn net.Conn, buf []byte) {
 	}
 }
 
+func pipe(srcConn, destConn net.Conn) error {
+	done := make(chan error, 1)
+
+	cp := func(r, w net.Conn) {
+		n, err := io.Copy(r, w)
+		fmt.Printf("copied %d bytes from %s to %s", n, r.RemoteAddr(), w.RemoteAddr())
+		done <- err
+	}
+
+	go cp(srcConn, destConn)
+	go cp(destConn, srcConn)
+	err1 := <-done
+	err2 := <-done
+
+	if err1 != nil {
+		return err1
+	}
+
+	if err2 != nil {
+		return err2
+	}
+	return nil
+}
+
 func handleConnection(conn net.Conn) bool {
 
 	var buf = make([]byte, BufferSize)
@@ -96,6 +122,20 @@ func handleConnection(conn net.Conn) bool {
 
 	host := parseHost(buf)
 
+	// tlsConn := conn.(*tls.Conn)
+
+	tlsConn := conn.(*tls.Conn)
+
+	// handshakeBuf := make([]byte, len(tlsConn.hand))
+
+	// handshakeRaw := copy(tlsConn.hand, handshakeBuf)
+
+	// clientHelloSpec := tls.ClientHelloSpec{}
+
+	// handshakeData := clientHelloSpec.FromRaw(handshakeRaw)
+
+	// fmt.Printf("Handshake %v \n", handshakeData)
+
 	_, err = conn.Write([]byte(OK_RESPONSE))
 	if err != nil {
 		fmt.Println("Error when writing to conn ", err)
@@ -103,6 +143,7 @@ func handleConnection(conn net.Conn) bool {
 	}
 
 	hostConn, err := net.Dial("tcp", host)
+
 	if err != nil {
 		fmt.Println("Error when creating connection to ", host)
 		return false
@@ -112,65 +153,30 @@ func handleConnection(conn net.Conn) bool {
 		hostConn.Close()
 		fmt.Println("Closing client connection")
 	}()
-	tlsConfig := &tls.Config{
-		ServerName: strings.Split(host, ":")[0],
-	}
-	tlsConn := tls.Client(hostConn, tlsConfig)
-	err = tlsConn.Handshake()
-	if err != nil {
-		fmt.Println("Error during destination handshake")
 
-	}
-
-	_, err = conn.Read(buf)
+	err = pipe(tlsConn, hostConn)
 	if err != nil {
 		fmt.Println("Error when reading conn: ", err)
-		return false
+
 	}
-	fmt.Println("Data: ", buf)
 
-	// _, err = conn.Read(buf)
-	// if err != nil {
-	// 	fmt.Println("Error when reading contnet", err)
-	// 	return false
-	// }
-	// fmt.Println("Read content: ", string(buf))
+	return true
 
-	go processConn(conn, hostConn, buf)
-	// go processConn(hostConn, conn, nil)
-
-	// return false
-
-	// _, err := conn.Read(initBuf)
-	// if err != nil {
-	// 	log.Printf("Error reading conn: %v \n", err)
-	// 	return false
-	// }
-	// log.Printf("Reading request: %s", string(buf))
-
-	// tlsConn := conn.(*tls.Conn)
-
-	// state := tlsConn.ConnectionState()
-
-	// log.Printf("Hello client: %v", tlsConn)
-	// log.Printf("Hello state: %v", state)
-
-	return false
 }
 
 func main() {
 
-	// cert := loadCert("server.crt", "server.key")
-	// tlsConfig := &tls.Config{
-	// 	ServerName: "localhost",
-	// 	NextProtos: []string{
-	// 		"h2",
-	// 	},
-	// 	Certificates:       []tls.Certificate{cert},
-	// 	InsecureSkipVerify: true,
-	// }
+	cert := loadCert("server.crt", "server.key")
+	tlsConfig := &tls.Config{
+		ServerName: "localhost",
+		NextProtos: []string{
+			"h2",
+		},
+		Certificates:       []tls.Certificate{cert},
+		InsecureSkipVerify: true,
+	}
 
-	listener, err := net.Listen("tcp", ":8000")
+	listener, err := tls.Listen("tcp", ":8000", tlsConfig)
 	if err != nil {
 		log.Fatalf("Error during creation of TCP listener %v", err)
 	}
