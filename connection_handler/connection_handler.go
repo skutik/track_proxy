@@ -55,6 +55,19 @@ func preCheckClientHelloData(rawData []byte) []byte {
 	return rawData[5:]
 }
 
+func handleHttp() {}
+
+func handleHttp2(conn *tls.Conn) bool {
+	frames, req, err := frames_parser.ParseFrames(nil, conn)
+	if err != nil {
+		log.Println("Error when parsing frames")
+	}
+
+	log.Println("Parsed frames:", frames)
+	log.Println("Parsed req:", req)
+	return true
+}
+
 func HandleConnection(conn net.Conn, cert *x509.Certificate, key any) bool {
 
 	var buf = make([]byte, BufferSize)
@@ -93,7 +106,7 @@ func HandleConnection(conn net.Conn, cert *x509.Certificate, key any) bool {
 		MinVersion:               tls.VersionTLS13,
 		Certificates:             []tls.Certificate{tlsCert},
 		NextProtos: []string{
-			"h2",
+			"h2", "http/1.1",
 		},
 		InsecureSkipVerify: true,
 	}
@@ -111,6 +124,34 @@ func HandleConnection(conn net.Conn, cert *x509.Certificate, key any) bool {
 		tlsServerConn.Close()
 		log.Println("closing TLS server conn")
 	}()
+
+	http2PrefixLen := len(frames_parser.HTTP2_PREFIX)
+	requestBuffer := make([]byte, http2PrefixLen)
+
+	_, err = tlsServerConn.Read(requestBuffer)
+	if err != nil {
+		fmt.Println("Error when reading contnet", err)
+		return false
+	}
+
+	if string(requestBuffer) == frames_parser.HTTP2_PREFIX {
+		handleHttp2(tlsServerConn)
+		return true
+	} else {
+		// handleHttp()
+		log.Println("HTTP1 request")
+		return true
+	}
+
+	reqBuf := make([]byte, BufferSize)
+	for {
+		_, err := tlsServerConn.Read(reqBuf)
+		if err != nil {
+			fmt.Println("Error when reading contnet", err)
+			break
+		}
+		log.Println("Read content: ", string(reqBuf))
+	}
 
 	hostConn, err := tls.Dial("tcp", host, &tls.Config{})
 	if err != nil {
