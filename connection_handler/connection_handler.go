@@ -1,17 +1,23 @@
 package connection_handler
 
 import (
+	"bytes"
 	"crypto/x509"
 	"fmt"
 	"log"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 	"track_proxy/cert_handler"
 	"track_proxy/client_hello"
 	"track_proxy/frames_parser"
+	"track_proxy/requests_storage"
 
+	http "github.com/bogdanfinn/fhttp"
 	tls "github.com/refraction-networking/utls"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/hpack"
 )
 
 const BufferSize = 1024 * 4
@@ -57,18 +63,104 @@ func preCheckClientHelloData(rawData []byte) []byte {
 
 func handleHttp() {}
 
-func handleHttp2(conn *tls.Conn) bool {
-	frames, req, err := frames_parser.ParseFrames(nil, conn)
+func prepareHeaders(response *requests_storage.ResponseRecord) []byte {
+	var headersBuffer bytes.Buffer
+
+	encoder := hpack.NewEncoder(&headersBuffer)
+	encoder.WriteField(hpack.HeaderField{Name: ":status", Value: strconv.Itoa(response.StatusCode)})
+	if response.ResponseBody != nil {
+		encoder.WriteField(hpack.HeaderField{Name: "content-length", Value: strconv.Itoa(len(response.ResponseBody))})
+	}
+	for key, values := range response.Headers {
+		key = strings.ToLower(key)
+		if key == "content-encoding" {
+			continue
+		}
+		for _, value := range values {
+			log.Println("adding header:", key, value)
+			encoder.WriteField(hpack.HeaderField{Name: key, Value: value})
+		}
+	}
+	return headersBuffer.Bytes()
+}
+
+// func writeHeadersFrame(framer *http2.Framer, streamID uint32, headers []byte) {
+// 	err := framer.WriteHeaders(http2.HeadersFrameParam{
+// 		StreamID:      streamID,
+// 		EndHeaders:    true,
+// 		BlockFragment: headers,
+// 	})
+// 	if err != nil {
+// 		log.Println("Error when writing headers to conn", err)
+// 	}
+// }
+
+// func writeDataFrame(framer *http2.Framer, streamID uint32, data []byte) {
+// 	err := framer.WriteData(streamID, true, data)
+// 	if err != nil {
+// 		log.Println("Error when writing data to conn", err)
+// 	}
+// }
+
+func handleHttp2(conn *tls.Conn) (*requests_storage.Request, error) {
+	framer := http2.NewFramer(conn, conn)
+	frames, reqRecord, err := frames_parser.ParseFrames(framer)
+	framer.WriteRawFrame(http2.FrameSettings, 0, 0, []byte{})
 	if err != nil {
 		log.Println("Error when parsing frames")
 	}
 
 	log.Println("Parsed frames:", frames)
-	log.Println("Parsed req:", req)
-	return true
+	log.Println("Parsed req:", reqRecord)
+
+	resp, err := reqRecord.ProcessRequest()
+
+	if err != nil {
+		log.Println("Error processing request:", resp)
+		return &requests_storage.Request{}, fmt.Errorf(err.Error())
+	}
+	respRecord := requests_storage.ResponseRecordFromResponse(resp)
+	log.Println("Response record:", respRecord.Headers)
+
+	// writeHeadersFrame(framer, 1, prepareHeaders(&respRecord))
+
+	// stringResponse := stringifyResponse(resp, respRecord.ResponseBody)
+	// log.Println("Http response:\n", stringResponse)
+	// conn.Write([]byte(stringResponse))
+	err = framer.WriteHeaders(http2.HeadersFrameParam{
+		StreamID:      1,
+		EndHeaders:    true,
+		BlockFragment: prepareHeaders(&respRecord),
+		EndStream:     respRecord.ResponseBody == nil,
+	})
+	if err != nil {
+		log.Println("Error when writing headers to conn", err)
+	}
+
+	if respRecord.ResponseBody != nil {
+		err := framer.WriteData(1, true, respRecord.ResponseBody)
+		if err != nil {
+			log.Println("Error when writing data to conn", err)
+		}
+	}
+	return &requests_storage.Request{
+		Request:  reqRecord,
+		Response: respRecord,
+	}, nil
 }
 
-func HandleConnection(conn net.Conn, cert *x509.Certificate, key any) bool {
+func stringifyResponse(res *http.Response, body []byte) string {
+	var responseString strings.Builder
+	fmt.Fprintf(&responseString, "%s %d\r\n", strings.TrimRight(res.Proto, ".0"), res.StatusCode)
+	res.Header.Write(&responseString)
+	if body != nil {
+		fmt.Fprintf(&responseString, "\r\n%s", body)
+	}
+
+	return responseString.String()
+}
+
+func HandleConnection(conn net.Conn, cert *x509.Certificate, key any, storage []requests_storage.Request) bool {
 
 	var buf = make([]byte, BufferSize)
 	defer func() {
@@ -135,7 +227,12 @@ func HandleConnection(conn net.Conn, cert *x509.Certificate, key any) bool {
 	}
 
 	if string(requestBuffer) == frames_parser.HTTP2_PREFIX {
-		handleHttp2(tlsServerConn)
+		request, err := handleHttp2(tlsServerConn)
+		storage = append(storage, *request)
+		if err != nil {
+			log.Println("Error when processing request")
+			return false
+		}
 		return true
 	} else {
 		// handleHttp()

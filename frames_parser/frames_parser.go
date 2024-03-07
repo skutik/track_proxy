@@ -1,7 +1,6 @@
 package frames_parser
 
 import (
-	"io"
 	"log"
 	"net/url"
 	"strings"
@@ -33,11 +32,10 @@ func parseHttpSetting(setting string) (string, string) {
 	return strings.TrimLeft(parts[0], "["), strings.TrimRight(parts[1], "]")
 }
 
-func ParseFrames(w io.Writer, r io.Reader) ([]Http2Frame, requests_storage.RequestType, error) {
+func ParseFrames(framer *http2.Framer) ([]Http2Frame, requests_storage.RequestRecord, error) {
 	var frames []Http2Frame
-	framer := http2.NewFramer(w, r)
 
-	var req requests_storage.RequestType
+	var req requests_storage.RequestRecord
 	req.HttpVersion = "HTTP2"
 	req.HttpSetting = make(map[string]string)
 	for {
@@ -59,6 +57,8 @@ func ParseFrames(w io.Writer, r io.Reader) ([]Http2Frame, requests_storage.Reque
 			decoder := hpack.NewDecoder(2048, nil)
 			hf, _ := decoder.DecodeFull(fType.HeaderBlockFragment())
 			req.Headers = make(map[string][]string)
+
+			log.Println("Headers streamID", frame.Header().StreamID)
 
 			reqUrl := &url.URL{}
 			for _, h := range hf {
@@ -104,6 +104,7 @@ func ParseFrames(w io.Writer, r io.Reader) ([]Http2Frame, requests_storage.Reque
 
 		case *http2.DataFrame:
 			payload = fType.Data()
+			log.Println("Data streamID", frame.Header().StreamID)
 			req.RequestBody = payload
 
 		default:

@@ -4,6 +4,7 @@ import (
 	"log"
 	"track_proxy/cert_handler"
 	"track_proxy/connection_handler"
+	"track_proxy/requests_storage"
 
 	tls "github.com/refraction-networking/utls"
 )
@@ -19,6 +20,8 @@ func main() {
 		Certificates:       []tls.Certificate{cert},
 		InsecureSkipVerify: true,
 	}
+
+	storage := []requests_storage.Request{}
 
 	certFile, certKey, err := cert_handler.LoadX509KeyPair("RootCA.pem", "RootCA.key")
 	if err != nil {
@@ -42,7 +45,7 @@ func main() {
 
 		log.Printf("Processing connection %v \n", conn)
 		go func() {
-			success := connection_handler.HandleConnection(conn, certFile, certKey)
+			success := connection_handler.HandleConnection(conn, certFile, certKey, storage)
 			log.Printf("Connecion %v success status: %v \n", conn.RemoteAddr().String(), success)
 		}()
 	}

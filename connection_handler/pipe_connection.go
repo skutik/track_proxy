@@ -40,7 +40,7 @@ func forwardData(src, dst net.Conn, wg *sync.WaitGroup) {
 	}
 
 	log.Println("Total bytes transferred:", bytesCounter)
-	frames_parser.ParseFrames(nil, &buf)
+	// frames_parser.ParseFrames(nil, &buf)
 	log.Println("Closing connection to", dst.RemoteAddr().String())
 	dst.Close()
 }
