@@ -7,27 +7,31 @@ import (
 	"log"
 	"net"
 	"sync"
-	"track_proxy/frames_parser"
 )
 
-func forwardData(src, dst net.Conn, wg *sync.WaitGroup) {
+func forwardData(src, dst net.Conn, wg *sync.WaitGroup, bufferChan chan bytes.Buffer) {
 	defer wg.Done()
 
 	buffer := make([]byte, 1024)
 	var bytesCounter int
-	var buf bytes.Buffer
+	var framerBuffer bytes.Buffer
 
-	teeReader := io.TeeReader(src, &buf)
-
+	teeReader := io.TeeReader(src, &framerBuffer)
 	for {
 		n, err := teeReader.Read(buffer)
 		bytesCounter += n
 		if err != nil {
 			if err != io.EOF {
 				log.Println("Error reading from connection:", err)
+				break
 			}
+			log.Printf("%s received EOF\n", src.RemoteAddr().String())
+			// dst.Write([]byte{})
+			break
+		}
 
-			log.Println("EOF from connection", src.RemoteAddr().String())
+		if n == 0 {
+			log.Println("No data to process")
 			break
 		}
 
@@ -39,19 +43,20 @@ func forwardData(src, dst net.Conn, wg *sync.WaitGroup) {
 		}
 	}
 
-	log.Println("Total bytes transferred:", bytesCounter)
-	// frames_parser.ParseFrames(nil, &buf)
+	log.Println("Total bytes transferred:", bytesCounter, src.RemoteAddr().String(), dst.RemoteAddr().String())
+	log.Println("Data:", framerBuffer.Bytes())
+	bufferChan <- framerBuffer
 	log.Println("Closing connection to", dst.RemoteAddr().String())
 	dst.Close()
 }
 
-func PipeHttp2(srcConn net.Conn, destConn net.Conn, framesChannel chan frames_parser.Http2Frame) error {
-
+func PipeHttp2(srcConn net.Conn, destConn net.Conn, externalWg *sync.WaitGroup, srcBuffer, dstBuffer chan bytes.Buffer) error {
+	defer externalWg.Done()
 	var wg sync.WaitGroup
 	wg.Add(2)
 
-	go forwardData(srcConn, destConn, &wg)
-	go forwardData(destConn, srcConn, &wg)
+	go forwardData(srcConn, destConn, &wg, srcBuffer)
+	go forwardData(destConn, srcConn, &wg, dstBuffer)
 
 	wg.Wait()
 	return nil

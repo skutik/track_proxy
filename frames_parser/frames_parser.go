@@ -48,6 +48,7 @@ func ParseFrames(framer *http2.Framer) ([]Http2Frame, requests_storage.RequestRe
 		log.Println("Frame data:", frame)
 		log.Println("Frame header:", frame.Header().Type)
 		log.Println("Frame flags:", frame.Header().Flags)
+		log.Println("Frame Stream ID:", frame.Header().StreamID)
 
 		var payload []byte = nil
 
@@ -116,7 +117,7 @@ func ParseFrames(framer *http2.Framer) ([]Http2Frame, requests_storage.RequestRe
 			httpFrame.StreamEnd = true
 			frames = append(frames, httpFrame)
 			log.Println("HTTP2 stream ended")
-			break
+			// break
 		}
 		httpFrame.StreamEnd = false
 		frames = append(frames, httpFrame)

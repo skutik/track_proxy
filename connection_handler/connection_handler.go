@@ -8,6 +8,7 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"track_proxy/cert_handler"
 	"track_proxy/client_hello"
@@ -226,13 +227,67 @@ func HandleConnection(conn net.Conn, cert *x509.Certificate, key any, storage []
 		return false
 	}
 
-	if string(requestBuffer) == frames_parser.HTTP2_PREFIX {
-		request, err := handleHttp2(tlsServerConn)
-		storage = append(storage, *request)
-		if err != nil {
-			log.Println("Error when processing request")
-			return false
+	hostConn, err := tls.Dial("tcp", host, &tls.Config{})
+	if err != nil {
+		log.Println("Error when creating connection to ", host)
+		return false
+	}
+
+	defer func() {
+		log.Println("Closing connection to host", host)
+		defer hostConn.Close()
+
+	}()
+
+	if string(requestBuffer) == http2.ClientPreface {
+
+		// incomingFramesChan := make(chan frames_parser.Http2Frame)
+		// outcomingFramesChan := make(chan frames_parser.Http2Frame)
+
+		log.Println("Starting pipe")
+		hostConn.Write([]byte(http2.ClientPreface))
+
+		srcBuffer := make(chan bytes.Buffer)
+		dstBuffer := make(chan bytes.Buffer)
+
+		var wg sync.WaitGroup
+
+		wg.Add(1)
+		go PipeHttp2(tlsServerConn, hostConn, &wg, srcBuffer, dstBuffer)
+
+		for {
+			select {
+			case srcStream := <-srcBuffer:
+				log.Println("Processing src stream")
+				fr := http2.NewFramer(nil, &srcStream)
+				frames, req, err := frames_parser.ParseFrames(fr)
+				if err != nil {
+					log.Println("Error when parsing src frames:", err)
+				}
+
+				log.Println("Parsed src frames", frames)
+				log.Println("Parsed src request", req)
+
+			case dstStream := <-dstBuffer:
+				log.Println("Processing dst stream")
+				fr := http2.NewFramer(nil, &dstStream)
+				frames, req, err := frames_parser.ParseFrames(fr)
+				if err != nil {
+					log.Println("Error when parsing src frames:", err)
+				}
+
+				log.Println("Parsed dst frames", frames)
+				log.Println("Parsed dst request", req)
+			}
 		}
+		wg.Wait()
+
+		// request, err := handleHttp2(tlsServerConn)
+		// storage = append(storage, *request)
+		// if err != nil {
+		// 	log.Println("Error when processing request")
+		// 	return false
+		// }
 		return true
 	} else {
 		// handleHttp()
@@ -250,15 +305,6 @@ func HandleConnection(conn net.Conn, cert *x509.Certificate, key any, storage []
 		log.Println("Read content: ", string(reqBuf))
 	}
 
-	hostConn, err := tls.Dial("tcp", host, &tls.Config{})
-	if err != nil {
-		log.Println("Error when creating connection to ", host)
-		return false
-	}
-
-	framesChannel := make(chan frames_parser.Http2Frame)
-
-	PipeHttp2(tlsServerConn, hostConn, framesChannel)
 	client_hello_raw := preCheckClientHelloData(tlsConn.ClientHelloRaw)
 
 	client_hello, err := client_hello.UnmarshallClientHello(client_hello_raw)
