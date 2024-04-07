@@ -32,12 +32,12 @@ func parseHttpSetting(setting string) (string, string) {
 	return strings.TrimLeft(parts[0], "["), strings.TrimRight(parts[1], "]")
 }
 
-func ParseFrames(framer *http2.Framer) ([]Http2Frame, requests_storage.RequestRecord, error) {
+func ParseFrames(framer *http2.Framer) ([]Http2Frame, *requests_storage.UnknownRecord, error) {
 	var frames []Http2Frame
 
-	var req requests_storage.RequestRecord
-	req.HttpVersion = "HTTP2"
-	req.HttpSetting = make(map[string]string)
+	var rec requests_storage.UnknownRecord
+	rec.HttpVersion = "HTTP2"
+	rec.HttpSetting = make(map[string]string)
 	for {
 		frame, err := framer.ReadFrame()
 		httpFrame := Http2Frame{}
@@ -57,7 +57,7 @@ func ParseFrames(framer *http2.Framer) ([]Http2Frame, requests_storage.RequestRe
 		case *http2.HeadersFrame:
 			decoder := hpack.NewDecoder(2048, nil)
 			hf, _ := decoder.DecodeFull(fType.HeaderBlockFragment())
-			req.Headers = make(map[string][]string)
+			rec.Headers = make(map[string][]string)
 
 			log.Println("Headers streamID", frame.Header().StreamID)
 
@@ -65,15 +65,15 @@ func ParseFrames(framer *http2.Framer) ([]Http2Frame, requests_storage.RequestRe
 			for _, h := range hf {
 				log.Printf("Found header: %s\n", h.Name+":"+h.Value)
 				if strings.HasPrefix(h.Name, ":") {
-					req.PseudoHeadersOrder = append(req.PseudoHeadersOrder, h.Name)
+					rec.PseudoHeadersOrder = append(rec.PseudoHeadersOrder, h.Name)
 					switch h.Name {
 					case ":method":
-						req.Method = h.Value
+						rec.Method = h.Value
 					case ":scheme":
 						// scheme = h.Value
 						reqUrl.Scheme = h.Value
 					case ":authority":
-						reqUrl.Host, req.Host = h.Value, h.Value
+						reqUrl.Host, rec.Host = h.Value, h.Value
 					case ":path":
 						reqUrl.Path = h.Value
 					default:
@@ -81,32 +81,32 @@ func ParseFrames(framer *http2.Framer) ([]Http2Frame, requests_storage.RequestRe
 					}
 					continue
 				}
-				_, exists := req.Headers[h.Name]
+				_, exists := rec.Headers[h.Name]
 				if exists {
-					req.Headers[h.Name] = append(req.Headers[h.Name], h.Value)
+					rec.Headers[h.Name] = append(rec.Headers[h.Name], h.Value)
 				} else {
-					req.Headers[h.Name] = []string{h.Value}
-					req.HeadersOrder = append(req.HeadersOrder, strings.ToLower(h.Name))
+					rec.Headers[h.Name] = []string{h.Value}
+					rec.HeadersOrder = append(rec.HeadersOrder, strings.ToLower(h.Name))
 				}
 			}
 
-			req.Url = reqUrl.String()
+			rec.Url = reqUrl.String()
 
 		case *http2.WindowUpdateFrame:
 			log.Println("Frame update: ", fType.Increment)
-			req.HttpWindowUpdate = int(fType.Increment)
+			rec.HttpWindowUpdate = int(fType.Increment)
 
 		case *http2.SettingsFrame:
 			fType.ForeachSetting(func(setting http2.Setting) error {
 				settingName, settingValue := parseHttpSetting(setting.String())
-				req.HttpSetting[settingName] = settingValue
+				rec.HttpSetting[settingName] = settingValue
 				return nil
 			})
 
 		case *http2.DataFrame:
 			payload = fType.Data()
 			log.Println("Data streamID", frame.Header().StreamID)
-			req.RequestBody = payload
+			rec.Body = payload
 
 		default:
 			log.Println("Unexpected Frame type", fType)
@@ -123,5 +123,5 @@ func ParseFrames(framer *http2.Framer) ([]Http2Frame, requests_storage.RequestRe
 		frames = append(frames, httpFrame)
 
 	}
-	return frames, req, nil
+	return frames, &rec, nil
 }

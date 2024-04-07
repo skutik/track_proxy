@@ -69,8 +69,8 @@ func prepareHeaders(response *requests_storage.ResponseRecord) []byte {
 
 	encoder := hpack.NewEncoder(&headersBuffer)
 	encoder.WriteField(hpack.HeaderField{Name: ":status", Value: strconv.Itoa(response.StatusCode)})
-	if response.ResponseBody != nil {
-		encoder.WriteField(hpack.HeaderField{Name: "content-length", Value: strconv.Itoa(len(response.ResponseBody))})
+	if response.Body != nil {
+		encoder.WriteField(hpack.HeaderField{Name: "content-length", Value: strconv.Itoa(len(response.Body))})
 	}
 	for key, values := range response.Headers {
 		key = strings.ToLower(key)
@@ -103,52 +103,52 @@ func prepareHeaders(response *requests_storage.ResponseRecord) []byte {
 // 	}
 // }
 
-func handleHttp2(conn *tls.Conn) (*requests_storage.Request, error) {
-	framer := http2.NewFramer(conn, conn)
-	frames, reqRecord, err := frames_parser.ParseFrames(framer)
-	framer.WriteRawFrame(http2.FrameSettings, 0, 0, []byte{})
-	if err != nil {
-		log.Println("Error when parsing frames")
-	}
+// func handleHttp2(conn *tls.Conn) (*requests_storage.Request, error) {
+// 	framer := http2.NewFramer(conn, conn)
+// 	frames, reqRecord, err := frames_parser.ParseFrames(framer)
+// 	framer.WriteRawFrame(http2.FrameSettings, 0, 0, []byte{})
+// 	if err != nil {
+// 		log.Println("Error when parsing frames")
+// 	}
 
-	log.Println("Parsed frames:", frames)
-	log.Println("Parsed req:", reqRecord)
+// 	log.Println("Parsed frames:", frames)
+// 	log.Println("Parsed req:", reqRecord)
 
-	resp, err := reqRecord.ProcessRequest()
+// 	resp, err := reqRecord.ProcessRequest()
 
-	if err != nil {
-		log.Println("Error processing request:", resp)
-		return &requests_storage.Request{}, fmt.Errorf(err.Error())
-	}
-	respRecord := requests_storage.ResponseRecordFromResponse(resp)
-	log.Println("Response record:", respRecord.Headers)
+// 	if err != nil {
+// 		log.Println("Error processing request:", resp)
+// 		return &requests_storage.Request{}, fmt.Errorf(err.Error())
+// 	}
+// 	respRecord := requests_storage.ResponseRecordFromResponse(resp)
+// 	log.Println("Response record:", respRecord.Headers)
 
-	// writeHeadersFrame(framer, 1, prepareHeaders(&respRecord))
+// 	// writeHeadersFrame(framer, 1, prepareHeaders(&respRecord))
 
-	// stringResponse := stringifyResponse(resp, respRecord.ResponseBody)
-	// log.Println("Http response:\n", stringResponse)
-	// conn.Write([]byte(stringResponse))
-	err = framer.WriteHeaders(http2.HeadersFrameParam{
-		StreamID:      1,
-		EndHeaders:    true,
-		BlockFragment: prepareHeaders(&respRecord),
-		EndStream:     respRecord.ResponseBody == nil,
-	})
-	if err != nil {
-		log.Println("Error when writing headers to conn", err)
-	}
+// 	// stringResponse := stringifyResponse(resp, respRecord.ResponseBody)
+// 	// log.Println("Http response:\n", stringResponse)
+// 	// conn.Write([]byte(stringResponse))
+// 	err = framer.WriteHeaders(http2.HeadersFrameParam{
+// 		StreamID:      1,
+// 		EndHeaders:    true,
+// 		BlockFragment: prepareHeaders(&respRecord),
+// 		EndStream:     respRecord.Body == nil,
+// 	})
+// 	if err != nil {
+// 		log.Println("Error when writing headers to conn", err)
+// 	}
 
-	if respRecord.ResponseBody != nil {
-		err := framer.WriteData(1, true, respRecord.ResponseBody)
-		if err != nil {
-			log.Println("Error when writing data to conn", err)
-		}
-	}
-	return &requests_storage.Request{
-		Request:  reqRecord,
-		Response: respRecord,
-	}, nil
-}
+// 	if respRecord.Body != nil {
+// 		err := framer.WriteData(1, true, respRecord.Body)
+// 		if err != nil {
+// 			log.Println("Error when writing data to conn", err)
+// 		}
+// 	}
+// 	return &requests_storage.Request{
+// 		Request:  reqRecord,
+// 		Response: respRecord,
+// 	}, nil
+// }
 
 func stringifyResponse(res *http.Response, body []byte) string {
 	var responseString strings.Builder
@@ -251,6 +251,7 @@ func HandleConnection(conn net.Conn, cert *x509.Certificate, key any, storage []
 		dstBuffer := make(chan bytes.Buffer)
 
 		var wg sync.WaitGroup
+		var request requests_storage.Request
 
 		wg.Add(1)
 		go PipeHttp2(tlsServerConn, hostConn, &wg, srcBuffer, dstBuffer)
@@ -260,27 +261,28 @@ func HandleConnection(conn net.Conn, cert *x509.Certificate, key any, storage []
 			case srcStream := <-srcBuffer:
 				log.Println("Processing src stream")
 				fr := http2.NewFramer(nil, &srcStream)
-				frames, req, err := frames_parser.ParseFrames(fr)
+				frames, rec, err := frames_parser.ParseFrames(fr)
+				request.Request = requests_storage.RequestRecordFromUknown(rec)
 				if err != nil {
 					log.Println("Error when parsing src frames:", err)
 				}
 
 				log.Println("Parsed src frames", frames)
-				log.Println("Parsed src request", req)
 
 			case dstStream := <-dstBuffer:
 				log.Println("Processing dst stream")
 				fr := http2.NewFramer(nil, &dstStream)
-				frames, req, err := frames_parser.ParseFrames(fr)
+				frames, rec, err := frames_parser.ParseFrames(fr)
+				request.Response = requests_storage.ResponseRecordFromUknown(rec)
 				if err != nil {
 					log.Println("Error when parsing src frames:", err)
 				}
 
 				log.Println("Parsed dst frames", frames)
-				log.Println("Parsed dst request", req)
+			default:
+				log.P
 			}
 		}
-		wg.Wait()
 
 		// request, err := handleHttp2(tlsServerConn)
 		// storage = append(storage, *request)
