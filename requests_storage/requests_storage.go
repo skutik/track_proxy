@@ -3,11 +3,20 @@ package requests_storage
 import (
 	"bytes"
 	"fmt"
+	"sync"
 	"time"
 	"track_proxy/client_hello"
 
 	http "github.com/bogdanfinn/fhttp"
 )
+
+var (
+	Storage []Request
+	Lock    sync.Mutex
+	RwLock  sync.Mutex
+)
+
+type RequestError struct{}
 
 type RequestRecord struct {
 	Method             string                         `json:"method"`
@@ -24,6 +33,7 @@ type RequestRecord struct {
 	ClientHello        []client_hello.ClientHelloData `json:"clientHello"`
 	HeadersOrder       []string                       `json:"headersOrder"`
 	PseudoHeadersOrder []string                       `json:"presudoHeadersOrder"`
+	Error              string                         `json:"error"`
 }
 
 type ResponseRecord struct {
@@ -31,6 +41,7 @@ type ResponseRecord struct {
 	HttpVersion string              `json:"httpVersion"`
 	Headers     map[string][]string `json:"headers"`
 	Body        []byte              `json:"body"`
+	Error       string              `json:"error"`
 }
 
 type Request struct {
@@ -53,20 +64,22 @@ type UnknownRecord struct {
 	HeadersOrder       []string
 	PseudoHeadersOrder []string
 	StatusCode         int
+	Error              string
 }
 
-func ResponseRecordFromUknown(unknownRecord *UnknownRecord) ResponseRecord {
-	return ResponseRecord{
+func ResponseRecordFromUknown(unknownRecord *UnknownRecord) *ResponseRecord {
+	return &ResponseRecord{
 		StatusCode:  unknownRecord.StatusCode,
 		HttpVersion: unknownRecord.HttpVersion,
 		Headers:     unknownRecord.Headers,
 		Body:        unknownRecord.Body,
+		Error:       unknownRecord.Error,
 	}
 }
 
-func RequestRecordFromUknown(unknownRecord *UnknownRecord) RequestRecord {
+func RequestRecordFromUknown(unknownRecord *UnknownRecord) *RequestRecord {
 
-	return RequestRecord{
+	return &RequestRecord{
 		Method:             unknownRecord.Method,
 		HttpVersion:        unknownRecord.HttpVersion,
 		Url:                unknownRecord.Url,
@@ -78,6 +91,7 @@ func RequestRecordFromUknown(unknownRecord *UnknownRecord) RequestRecord {
 		HttpWindowUpdate:   unknownRecord.HttpWindowUpdate,
 		HeadersOrder:       unknownRecord.HeadersOrder,
 		PseudoHeadersOrder: unknownRecord.PseudoHeadersOrder,
+		Error:              unknownRecord.Error,
 	}
 }
 

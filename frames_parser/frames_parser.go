@@ -1,6 +1,7 @@
 package frames_parser
 
 import (
+	"bytes"
 	"log"
 	"net/url"
 	"strings"
@@ -45,11 +46,6 @@ func ParseFrames(framer *http2.Framer) ([]Http2Frame, *requests_storage.UnknownR
 			log.Println("Error reading frame", err)
 			break
 		}
-		log.Println("Frame data:", frame)
-		log.Println("Frame header:", frame.Header().Type)
-		log.Println("Frame flags:", frame.Header().Flags)
-		log.Println("Frame Stream ID:", frame.Header().StreamID)
-
 		var payload []byte = nil
 
 		httpFrame.FrameType = frame.Header().Type
@@ -59,18 +55,14 @@ func ParseFrames(framer *http2.Framer) ([]Http2Frame, *requests_storage.UnknownR
 			hf, _ := decoder.DecodeFull(fType.HeaderBlockFragment())
 			rec.Headers = make(map[string][]string)
 
-			log.Println("Headers streamID", frame.Header().StreamID)
-
 			reqUrl := &url.URL{}
 			for _, h := range hf {
-				log.Printf("Found header: %s\n", h.Name+":"+h.Value)
 				if strings.HasPrefix(h.Name, ":") {
 					rec.PseudoHeadersOrder = append(rec.PseudoHeadersOrder, h.Name)
 					switch h.Name {
 					case ":method":
 						rec.Method = h.Value
 					case ":scheme":
-						// scheme = h.Value
 						reqUrl.Scheme = h.Value
 					case ":authority":
 						reqUrl.Host, rec.Host = h.Value, h.Value
@@ -93,7 +85,6 @@ func ParseFrames(framer *http2.Framer) ([]Http2Frame, *requests_storage.UnknownR
 			rec.Url = reqUrl.String()
 
 		case *http2.WindowUpdateFrame:
-			log.Println("Frame update: ", fType.Increment)
 			rec.HttpWindowUpdate = int(fType.Increment)
 
 		case *http2.SettingsFrame:
@@ -105,23 +96,46 @@ func ParseFrames(framer *http2.Framer) ([]Http2Frame, *requests_storage.UnknownR
 
 		case *http2.DataFrame:
 			payload = fType.Data()
-			log.Println("Data streamID", frame.Header().StreamID)
 			rec.Body = payload
 
 		default:
 			log.Println("Unexpected Frame type", fType)
 		}
 
-		log.Println("Frame parsed")
 		if frame.Header().Flags.Has(http2.FlagDataEndStream) {
 			httpFrame.StreamEnd = true
 			frames = append(frames, httpFrame)
 			log.Println("HTTP2 stream ended")
-			// break
 		}
 		httpFrame.StreamEnd = false
 		frames = append(frames, httpFrame)
 
 	}
 	return frames, &rec, nil
+}
+
+func parseframesBytes(bytes *bytes.Buffer) ([]Http2Frame, *requests_storage.UnknownRecord, error) {
+	fr := http2.NewFramer(nil, bytes)
+	return ParseFrames(fr)
+}
+
+func ParseResponseFrames(bytes *bytes.Buffer) *requests_storage.ResponseRecord {
+	req := &requests_storage.ResponseRecord{}
+	_, record, err := parseframesBytes(bytes)
+	if err != err {
+		log.Println("Error parsing response frames:", err)
+		return req
+	}
+	return requests_storage.ResponseRecordFromUknown(record)
+}
+
+func ParseRequestFrames(bytes *bytes.Buffer) *requests_storage.RequestRecord {
+	res := &requests_storage.RequestRecord{}
+	_, record, err := parseframesBytes(bytes)
+	if err != err {
+		log.Println("Error parsing request frames:", err)
+		return res
+	}
+	return requests_storage.RequestRecordFromUknown(record)
+
 }
