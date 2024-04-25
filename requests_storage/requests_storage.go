@@ -19,21 +19,21 @@ var (
 type RequestError struct{}
 
 type RequestRecord struct {
-	Method             string                         `json:"method"`
-	HttpVersion        string                         `json:"httpVersion"`
-	Url                string                         `json:"url"`
-	Headers            map[string][]string            `json:"headers"`
-	Host               string                         `json:"host"`
-	Body               []byte                         `json:"body"`
-	StartTimestamp     int64                          `json:"startTimestamp"`
-	FinishTimestamp    int64                          `json:"finishTimestamp"`
-	Schema             string                         `json:"schema"`
-	HttpSetting        map[string]string              `json:"httpSetting"`
-	HttpWindowUpdate   int                            `json:"httpWindowUpdate"`
-	ClientHello        []client_hello.ClientHelloData `json:"clientHello"`
-	HeadersOrder       []string                       `json:"headersOrder"`
-	PseudoHeadersOrder []string                       `json:"presudoHeadersOrder"`
-	Error              string                         `json:"error"`
+	Method             string                       `json:"method"`
+	HttpVersion        string                       `json:"httpVersion"`
+	Url                string                       `json:"url"`
+	Headers            map[string][]string          `json:"headers"`
+	Host               string                       `json:"host"`
+	Body               []byte                       `json:"body"`
+	StartTimestamp     int64                        `json:"startTimestamp"`
+	FinishTimestamp    int64                        `json:"finishTimestamp"`
+	Schema             string                       `json:"schema"`
+	HttpSetting        map[string]string            `json:"httpSetting"`
+	HttpWindowUpdate   int                          `json:"httpWindowUpdate"`
+	ClientHello        client_hello.ClientHelloData `json:"clientHello"`
+	HeadersOrder       []string                     `json:"headersOrder"`
+	PseudoHeadersOrder []string                     `json:"presudoHeadersOrder"`
+	Error              string                       `json:"error"`
 }
 
 type ResponseRecord struct {

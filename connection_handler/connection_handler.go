@@ -1,14 +1,17 @@
 package connection_handler
 
 import (
+	"bufio"
 	"crypto/x509"
 	"fmt"
 	"log"
 	"net"
+	"net/http"
 	"strings"
 	"sync"
 	"time"
 	"track_proxy/cert_handler"
+	"track_proxy/client_hello"
 	"track_proxy/requests_storage"
 
 	tls "github.com/refraction-networking/utls"
@@ -44,26 +47,15 @@ func parseHost(data []byte) string {
 	return parts[1]
 }
 
-func HandleConnection(conn net.Conn, cert *x509.Certificate, key any) bool {
-	var buf = make([]byte, BufferSize)
-	defer func() {
-		conn.Close()
-		log.Println("Closing client connection")
-	}()
-
-	_, err := conn.Read(buf)
-	if err != nil {
-		fmt.Println("Error when reading contnet", err)
-		return false
-	}
-	fmt.Println("Read content: ", string(buf))
-
-	host := parseHost(buf)
+func handleConnectRequest(conn net.Conn, cert *x509.Certificate, key any, req *http.Request, errChan chan error) {
+	host := req.Host
 	var hostDomain string
+	var err error
 	if strings.Contains(host, ":") {
 		hostDomain, _, err = net.SplitHostPort(host)
 		if err != nil {
-			log.Fatal("err splitting host ", host)
+			errChan <- err
+			return
 		}
 	} else {
 		hostDomain = host
@@ -72,7 +64,8 @@ func HandleConnection(conn net.Conn, cert *x509.Certificate, key any) bool {
 
 	tlsCert, err := tls.X509KeyPair(pemCert, pemKey)
 	if err != nil {
-		log.Fatal(err)
+		errChan <- err
+		return
 	}
 
 	tlsConfig := &tls.Config{
@@ -88,8 +81,8 @@ func HandleConnection(conn net.Conn, cert *x509.Certificate, key any) bool {
 
 	_, err = conn.Write([]byte(OK_RESPONSE))
 	if err != nil {
-		log.Println("Error when writing to conn ", err)
-
+		errChan <- fmt.Errorf("error when writing to conn %v", err)
+		return
 	}
 
 	tlsConn := &ClientHelloUtlsConn{Conn: conn.(*tls.Conn)}
@@ -102,14 +95,13 @@ func HandleConnection(conn net.Conn, cert *x509.Certificate, key any) bool {
 
 	hostConn, err := tls.Dial("tcp", host, &tls.Config{})
 	if err != nil {
-		log.Println("Error when creating connection to ", host)
-		return false
+		errChan <- fmt.Errorf("error when creating connection to %v", host)
+		return
 	}
 
 	defer func() {
 		log.Println("Closing connection to host", host)
 		defer hostConn.Close()
-
 	}()
 
 	log.Println("Starting pipe")
@@ -120,12 +112,74 @@ func HandleConnection(conn net.Conn, cert *x509.Certificate, key any) bool {
 	wg.Add(1)
 	go PipeHttp(tlsServerConn, hostConn, &wg, requestChan)
 	request := <-requestChan
+
+	clientHelloData, err := client_hello.UnmarshallClientHello(tlsConn.ClientHelloRaw)
+	if err != nil {
+		log.Println("error parsing client hello data:", err)
+	} else {
+		request.Request.ClientHello = *clientHelloData
+	}
+	log.Println("client hello data:", request.Request.ClientHello)
 	requests_storage.RwLock.Lock()
 	requests_storage.Storage = append(requests_storage.Storage, request)
-	log.Println("Storage:", requests_storage.Storage)
 	requests_storage.RwLock.Unlock()
 	close(requestChan)
 	wg.Wait()
+}
 
-	return true
+func handlerDirectRequest(conn net.Conn, req *http.Request, errChan chan error) {
+	client := http.Client{}
+	req.RequestURI = ""
+	res, err := client.Do(req)
+	if err != nil {
+		errChan <- fmt.Errorf("error processing http request: %s", err)
+		return
+	}
+	err = res.Write(conn)
+	if err != nil {
+		errChan <- fmt.Errorf("error writing to client connection %s", err)
+		return
+	}
+}
+
+func HandleConnection(conn net.Conn, cert *x509.Certificate, key any) bool {
+	defer func() {
+		conn.Close()
+		log.Println("Closing client connection")
+	}()
+
+	connReader := bufio.NewReader(conn)
+	req, err := http.ReadRequest(connReader)
+	if err != nil {
+		fmt.Println("Error when reading request", err)
+		return false
+	}
+
+	errChan := make(chan error)
+	if req.Method == http.MethodConnect {
+		go handleConnectRequest(conn, cert, key, req, errChan)
+	} else {
+		go handlerDirectRequest(conn, req, errChan)
+	}
+
+	for {
+		select {
+		case err := <-errChan:
+			if err != nil {
+				log.Println("error processing connection to host", err)
+				return false
+			}
+			return true
+		}
+	}
+
+	// _, err := conn.Read(buf)
+	// if err != nil {
+	// 	fmt.Println("Error when reading content", err)
+	// 	return false
+	// }
+	// fmt.Println("Read content: ", string(buf))
+
+	// host := parseHost(buf)
+	// host := parseHost([]byte(req.Host))
 }
