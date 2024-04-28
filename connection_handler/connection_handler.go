@@ -113,7 +113,8 @@ func handleConnectRequest(conn net.Conn, cert *x509.Certificate, key any, req *h
 	go PipeHttp(tlsServerConn, hostConn, &wg, requestChan)
 	request := <-requestChan
 
-	clientHelloData, err := client_hello.UnmarshallClientHello(tlsConn.ClientHelloRaw)
+	tlsClientHelloWithoutHeaders := tlsConn.ClientHelloRaw[5:]
+	clientHelloData, err := client_hello.UnmarshallClientHello(tlsClientHelloWithoutHeaders)
 	if err != nil {
 		log.Println("error parsing client hello data:", err)
 	} else {
@@ -162,7 +163,7 @@ func HandleConnection(conn net.Conn, cert *x509.Certificate, key any) bool {
 		go handlerDirectRequest(conn, req, errChan)
 	}
 
-	for {
+	{
 		select {
 		case err := <-errChan:
 			if err != nil {
@@ -172,14 +173,4 @@ func HandleConnection(conn net.Conn, cert *x509.Certificate, key any) bool {
 			return true
 		}
 	}
-
-	// _, err := conn.Read(buf)
-	// if err != nil {
-	// 	fmt.Println("Error when reading content", err)
-	// 	return false
-	// }
-	// fmt.Println("Read content: ", string(buf))
-
-	// host := parseHost(buf)
-	// host := parseHost([]byte(req.Host))
 }
