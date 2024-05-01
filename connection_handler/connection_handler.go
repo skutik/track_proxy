@@ -129,7 +129,11 @@ func handleConnectRequest(conn net.Conn, cert *x509.Certificate, key any, req *h
 }
 
 func handlerDirectRequest(conn net.Conn, req *http.Request, errChan chan error) {
-	client := http.Client{}
+	client := &http.Client{
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
 	req.RequestURI = ""
 	res, err := client.Do(req)
 	if err != nil {
@@ -141,6 +145,7 @@ func handlerDirectRequest(conn net.Conn, req *http.Request, errChan chan error) 
 		errChan <- fmt.Errorf("error writing to client connection %s", err)
 		return
 	}
+	errChan <- nil
 }
 
 func HandleConnection(conn net.Conn, cert *x509.Certificate, key any) bool {
@@ -163,14 +168,10 @@ func HandleConnection(conn net.Conn, cert *x509.Certificate, key any) bool {
 		go handlerDirectRequest(conn, req, errChan)
 	}
 
-	{
-		select {
-		case err := <-errChan:
-			if err != nil {
-				log.Println("error processing connection to host", err)
-				return false
-			}
-			return true
-		}
+	err = <-errChan
+	if err != nil {
+		log.Println("error processing connection to host", err)
+		return false
 	}
+	return true
 }
