@@ -73,10 +73,16 @@ func PipeHttp(srcConn net.Conn, destConn net.Conn, externalWg *sync.WaitGroup, r
 		select {
 		case srcBuffer := <-srcBufferChan:
 			log.Println("Processing src buffer")
-			if strings.HasPrefix(srcBuffer.String(), http2.ClientPreface) {
+			buff := make([]byte, len(http2.ClientPreface))
+			_, err := srcBuffer.Read(buff)
+			if err != nil {
+				log.Println("error reading src stream")
+			}
+			if string(buff) == http2.ClientPreface {
 				request.Request = *frames_parser.ParseRequestFrames(&srcBuffer)
 			} else {
-				request.Request = *request_parser.ParseHttpRequest(&srcBuffer)
+				srcBytes := append(buff, srcBuffer.Bytes()...)
+				request.Request = *request_parser.ParseHttpRequest(bytes.NewBuffer(srcBytes))
 			}
 			requestProtocol = request.Request.HttpVersion
 
@@ -90,7 +96,6 @@ func PipeHttp(srcConn net.Conn, destConn net.Conn, externalWg *sync.WaitGroup, r
 		}
 	}
 
-	log.Println("Reqest:", request)
 	requestChan <- request
 	wg.Wait()
 }

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"log"
 	"net/url"
+	"strconv"
 	"strings"
 	"track_proxy/requests_storage"
 
@@ -54,8 +55,8 @@ func ParseFrames(framer *http2.Framer) ([]Http2Frame, *requests_storage.UnknownR
 			decoder := hpack.NewDecoder(2048, nil)
 			hf, _ := decoder.DecodeFull(fType.HeaderBlockFragment())
 			rec.Headers = make(map[string][]string)
-
 			reqUrl := &url.URL{}
+			log.Println("header: ", hf)
 			for _, h := range hf {
 				if strings.HasPrefix(h.Name, ":") {
 					rec.PseudoHeadersOrder = append(rec.PseudoHeadersOrder, h.Name)
@@ -68,10 +69,16 @@ func ParseFrames(framer *http2.Framer) ([]Http2Frame, *requests_storage.UnknownR
 						reqUrl.Host, rec.Host = h.Value, h.Value
 					case ":path":
 						reqUrl.Path = h.Value
+					case ":status":
+						statusCode, err := strconv.Atoi(h.Value)
+						if err != nil {
+							log.Println("error converting str status code ", err)
+						} else {
+							rec.StatusCode = statusCode
+						}
 					default:
 						log.Println("Unexpected pseudo header: ", h.Name)
 					}
-					continue
 				}
 				_, exists := rec.Headers[h.Name]
 				if exists {

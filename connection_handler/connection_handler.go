@@ -120,7 +120,6 @@ func handleConnectRequest(conn net.Conn, cert *x509.Certificate, key any, req *h
 	} else {
 		request.Request.ClientHello = *clientHelloData
 	}
-	log.Println("client hello data:", request.Request.ClientHello)
 	requests_storage.RwLock.Lock()
 	requests_storage.Storage = append(requests_storage.Storage, request)
 	requests_storage.RwLock.Unlock()
