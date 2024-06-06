@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/url"
+	"strconv"
 	"strings"
 	"track_proxy/requests_storage"
 )
@@ -67,6 +68,12 @@ func ParseHttpResponse(buffer *bytes.Buffer) *requests_storage.ResponseRecord {
 	descParts := strings.Split(lines[0], " ")
 	rec := stringDataToRecord(lines[1:])
 	rec.HttpVersion = descParts[0]
+	statusCode, err := strconv.Atoi(descParts[1])
+	if err != nil {
+		rec.Error = err.Error()
+	} else {
+		rec.StatusCode = statusCode
+	}
 	return requests_storage.ResponseRecordFromUknown(rec)
 }
 

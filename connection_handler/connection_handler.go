@@ -120,9 +120,10 @@ func handleConnectRequest(conn net.Conn, cert *x509.Certificate, key any, req *h
 	} else {
 		request.Request.ClientHello = *clientHelloData
 	}
-	requests_storage.RwLock.Lock()
-	requests_storage.Storage = append(requests_storage.Storage, request)
-	requests_storage.RwLock.Unlock()
+	err = requests_storage.Storage.AddRequestToStorage(request)
+	if err != nil {
+		log.Println("error when adding request to storage")
+	}
 	close(requestChan)
 	wg.Wait()
 }

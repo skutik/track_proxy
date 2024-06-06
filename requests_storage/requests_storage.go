@@ -3,18 +3,22 @@ package requests_storage
 import (
 	"bytes"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 	"track_proxy/client_hello"
 
 	http "github.com/bogdanfinn/fhttp"
+	"github.com/google/uuid"
 )
 
 var (
-	Storage []Request
-	Lock    sync.Mutex
-	RwLock  sync.Mutex
+	Lock   sync.Mutex
+	RwLock sync.RWMutex
 )
+var Storage = make(RequestStorage)
+
+type RequestStorage map[string]Request
 
 type RequestError struct{}
 
@@ -45,6 +49,7 @@ type ResponseRecord struct {
 }
 
 type Request struct {
+	Id       string
 	Request  RequestRecord
 	Response ResponseRecord
 }
@@ -65,6 +70,60 @@ type UnknownRecord struct {
 	PseudoHeadersOrder []string
 	StatusCode         int
 	Error              string
+}
+
+func NewRequest() Request {
+	req := Request{}
+	req.Id = uuid.New().String()
+	return req
+}
+
+func (reqStorage RequestStorage) AddRequestToStorage(req Request) error {
+	if len(req.Id) == 0 {
+		req.Id = uuid.New().String()
+	}
+
+	Lock.Lock()
+	defer Lock.Unlock()
+
+	_, exists := reqStorage[req.Id]
+	if exists {
+		return fmt.Errorf("request ID %s is already included in storage", req.Id)
+	}
+	reqStorage[req.Id] = req
+	return nil
+}
+
+func (reqStorage RequestStorage) GetRequests() []Request {
+	requests := []Request{}
+
+	RwLock.Lock()
+	defer RwLock.Unlock()
+	for _, request := range reqStorage {
+		requests = append(requests, request)
+	}
+
+	return requests
+}
+
+func (reqStorage RequestStorage) GetRequestById(reqId string) (Request, error) {
+	RwLock.Lock()
+	defer RwLock.Unlock()
+	req, exists := reqStorage[reqId]
+	if !exists {
+		return Request{}, fmt.Errorf("request with ID %s not found", reqId)
+	}
+	return req, nil
+
+}
+
+func (reqStorage RequestStorage) GetCurlForRequest(reqId string) (string, error) {
+	req, err := reqStorage.GetRequestById(reqId)
+	if err != nil {
+		return "", err
+	}
+
+	return req.Request.GetCurlCommand(), nil
 }
 
 func ResponseRecordFromUknown(unknownRecord *UnknownRecord) *ResponseRecord {
@@ -122,6 +181,27 @@ func (req *RequestRecord) ProcessRequest() (*http.Response, error) {
 		return &emptyResp, fmt.Errorf("Error when processing request %s %s [%s]", req.Method, req.Url, req.HttpVersion)
 	}
 	return resp, nil
+}
+
+func (req *RequestRecord) GetCurlCommand() string {
+	var builder strings.Builder
+
+	builder.WriteString(fmt.Sprintf("curl -X %s '%s'", req.Method, req.Url))
+	for headerName, headerValues := range req.Headers {
+		if strings.HasPrefix(headerName, ":") {
+			continue
+		}
+
+		for _, headerValue := range headerValues {
+			builder.WriteString(fmt.Sprintf(" -H '%s: %s'", headerName, headerValue))
+		}
+	}
+
+	if len(req.Body) > 0 {
+		builder.WriteString(fmt.Sprintf(" --data '%s'", req.Body))
+	}
+	builder.WriteString(fmt.Sprintf(" --%s", strings.ToLower(req.HttpVersion)))
+	return builder.String()
 }
 
 // func ResponseRecordFromResponse(res *Response) ResponseRecord {

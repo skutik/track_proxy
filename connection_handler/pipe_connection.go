@@ -68,7 +68,7 @@ func PipeHttp(srcConn net.Conn, destConn net.Conn, externalWg *sync.WaitGroup, r
 	go forwardData(srcConn, destConn, &wg, srcBufferChan)
 	go forwardData(destConn, srcConn, &wg, dstBufferChan)
 
-	var request requests_storage.Request
+	request := requests_storage.NewRequest()
 	for i := 0; i < 2; i++ {
 		select {
 		case srcBuffer := <-srcBufferChan:
