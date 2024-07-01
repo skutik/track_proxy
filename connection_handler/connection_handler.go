@@ -20,6 +20,7 @@ import (
 const BufferSize = 1024 * 4
 const OK_RESPONSE = "HTTP/1.1 200 OK\r\n\r\n"
 const HOST_TIMEOUT = time.Second * 30
+const DEFAULT_PROTO = "http/1.1"
 
 type ClientHelloUtlsConn struct {
 	*tls.Conn
@@ -68,32 +69,37 @@ func handleConnectRequest(conn net.Conn, cert *x509.Certificate, key any, req *h
 		return
 	}
 
-	tlsConfig := &tls.Config{
-		PreferServerCipherSuites: true,
-		CurvePreferences:         []tls.CurveID{tls.X25519, tls.CurveP256},
-		MinVersion:               tls.VersionTLS13,
-		Certificates:             []tls.Certificate{tlsCert},
-		NextProtos: []string{
-			"h2", "http/1.1",
-		},
-		InsecureSkipVerify: true,
-	}
-
 	_, err = conn.Write([]byte(OK_RESPONSE))
 	if err != nil {
 		errChan <- fmt.Errorf("error when writing to conn %v", err)
 		return
 	}
 
-	tlsConn := &ClientHelloUtlsConn{Conn: conn.(*tls.Conn)}
-	tlsServerConn := tls.Server(tlsConn, tlsConfig)
+	hostConn, err := tls.Dial("tcp", host, &tls.Config{
+		NextProtos: []string{"h2", "http/1.1"},
+	})
+	serverProto := hostConn.ConnectionState().NegotiatedProtocol
+	if serverProto == "" {
+		serverProto = DEFAULT_PROTO
+	}
 
+	log.Println("server proto:", serverProto)
+	tlsConn := &ClientHelloUtlsConn{Conn: conn.(*tls.Conn)}
+	serverTlsConfig := &tls.Config{
+		PreferServerCipherSuites: true,
+		CurvePreferences:         []tls.CurveID{tls.X25519, tls.CurveP256},
+		MinVersion:               tls.VersionTLS13,
+		Certificates:             []tls.Certificate{tlsCert},
+		NextProtos:               []string{serverProto},
+		InsecureSkipVerify:       true,
+	}
+
+	tlsServerConn := tls.Server(tlsConn, serverTlsConfig)
 	defer func() {
 		tlsServerConn.Close()
 		log.Println("closing TLS server conn")
 	}()
 
-	hostConn, err := tls.Dial("tcp", host, &tls.Config{})
 	if err != nil {
 		errChan <- fmt.Errorf("error when creating connection to %v", host)
 		return

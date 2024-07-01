@@ -48,7 +48,7 @@ func forwardData(src, dst net.Conn, wg *sync.WaitGroup, bufferChan chan bytes.Bu
 		}
 	}
 
-	log.Println("Total bytes transferred:", bytesCounter, src.RemoteAddr().String(), dst.RemoteAddr().String())
+	log.Println("Total bytes transferred:", bytesCounter, "("+src.RemoteAddr().String()+" -> "+dst.RemoteAddr().String()+")")
 	bufferChan <- cpBuffer
 	log.Println("Closing connection to", dst.RemoteAddr().String())
 	dst.Close()
