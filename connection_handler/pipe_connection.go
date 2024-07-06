@@ -8,6 +8,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"time"
 	"track_proxy/frames_parser"
 	"track_proxy/request_parser"
 	"track_proxy/requests_storage"
@@ -65,10 +66,9 @@ func PipeHttp(srcConn net.Conn, destConn net.Conn, externalWg *sync.WaitGroup, r
 
 	wg.Add(2)
 
+	request := requests_storage.NewRequest()
 	go forwardData(srcConn, destConn, &wg, srcBufferChan)
 	go forwardData(destConn, srcConn, &wg, dstBufferChan)
-
-	request := requests_storage.NewRequest()
 	for i := 0; i < 2; i++ {
 		select {
 		case srcBuffer := <-srcBufferChan:
@@ -78,15 +78,31 @@ func PipeHttp(srcConn net.Conn, destConn net.Conn, externalWg *sync.WaitGroup, r
 			if err != nil {
 				log.Println("error reading src stream")
 			}
+
+			var parsedRequest requests_storage.RequestRecord
 			if string(buff) == http2.ClientPreface {
-				request.Request = *frames_parser.ParseRequestFrames(&srcBuffer)
+				parsedRequest = *frames_parser.ParseRequestFrames(&srcBuffer)
 			} else {
 				srcBytes := append(buff, srcBuffer.Bytes()...)
-				request.Request = *request_parser.ParseHttpRequest(bytes.NewBuffer(srcBytes))
+				parsedRequest = *request_parser.ParseHttpRequest(bytes.NewBuffer(srcBytes))
 			}
+			request.Request.Method = parsedRequest.Method
+			request.Request.HttpVersion = parsedRequest.HttpVersion
+			request.Request.Url = parsedRequest.Url
+			request.Request.Headers = parsedRequest.Headers
+			request.Request.Host = parsedRequest.Host
+			request.Request.Body = parsedRequest.Body
+			request.Request.Schema = parsedRequest.Schema
+			request.Request.HttpSetting = parsedRequest.HttpSetting
+			request.Request.HttpWindowUpdate = parsedRequest.HttpWindowUpdate
+			request.Request.HeadersOrder = parsedRequest.HeadersOrder
+			request.Request.PseudoHeadersOrder = parsedRequest.PseudoHeadersOrder
+			request.Request.Error = parsedRequest.Error
+
 			requestProtocol = request.Request.HttpVersion
 
 		case dstBuffer := <-dstBufferChan:
+			request.Request.FinishTimestamp = time.Now().UnixNano()
 			log.Println("Processing dst buffer")
 			if requestProtocol == "HTTP/1.1" || strings.HasPrefix(dstBuffer.String(), "HTTP/1.1") {
 				request.Response = *request_parser.ParseHttpResponse(&dstBuffer)

@@ -3,6 +3,7 @@ package requests_storage
 import (
 	"bytes"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -49,9 +50,9 @@ type ResponseRecord struct {
 }
 
 type Request struct {
-	Id       string
-	Request  RequestRecord
-	Response ResponseRecord
+	Id       string         `json:"id"`
+	Request  RequestRecord  `json:"request"`
+	Response ResponseRecord `json:"response"`
 }
 
 type UnknownRecord struct {
@@ -75,6 +76,7 @@ type UnknownRecord struct {
 func NewRequest() Request {
 	req := Request{}
 	req.Id = uuid.New().String()
+	req.Request.StartTimestamp = time.Now().UnixNano()
 	return req
 }
 
@@ -102,7 +104,9 @@ func (reqStorage RequestStorage) GetRequests() []Request {
 	for _, request := range reqStorage {
 		requests = append(requests, request)
 	}
-
+	sort.Slice(requests, func(i, j int) bool {
+		return requests[i].Request.StartTimestamp < requests[j].Request.StartTimestamp
+	})
 	return requests
 }
 
