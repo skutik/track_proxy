@@ -1,0 +1,33 @@
+{{ block "table" . }}
+    <div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Proto</th>
+                    <th>Method</th>
+                    <th>Status Code</th>
+                    <th>URL</th>
+                    <th>ID</th>
+                    <th>Start Timestamp</th>
+                    <th>Selected<th>
+                </tr>
+            </thead>
+            <tbody hx-get="/requests_table" hx-swap="beforeend" hx-trigger="every 1s"></tbody>
+        </table>
+    </div>
+{{ end }}
+
+{{ block "tableContent" .}}
+    {{ range . }}
+        <tr>
+            <td> {{ .Request.HttpVersion }} </td>
+            <td> {{ .Request.Method }}</td>
+            <td> {{ .Response.StatusCode }}</td>
+            <td> {{ .Request.Url }}</td>
+            <td> {{ .Id }}</td>
+            <td> {{ .Request.StartTimestamp }}</td>
+            <td> </td>
+        </tr>
+    {{ end }}
+
+{{ end }}

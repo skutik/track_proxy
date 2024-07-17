@@ -97,17 +97,46 @@ func (reqStorage RequestStorage) AddRequestToStorage(req Request) error {
 }
 
 func (reqStorage RequestStorage) GetRequests() []Request {
+	requests, _ := reqStorage.GetRequestSinceId("")
+	return requests
+}
+
+func (reqStorage RequestStorage) GetRequestSinceId(lastId string) ([]Request, string) {
 	requests := []Request{}
+	request := Request{}
+	i := 0
 
 	RwLock.Lock()
 	defer RwLock.Unlock()
+
 	for _, request := range reqStorage {
 		requests = append(requests, request)
 	}
+
+	if len(requests) == 0 {
+		return requests, ""
+	}
+
 	sort.Slice(requests, func(i, j int) bool {
 		return requests[i].Request.StartTimestamp < requests[j].Request.StartTimestamp
 	})
-	return requests
+
+	if len(lastId) != 0 {
+		for i, request = range requests {
+			if request.Id == lastId {
+				break
+			}
+		}
+
+		if len(requests) == (i + 1) {
+			return []Request{}, requests[len(requests)-1].Id
+		}
+
+		requests = requests[i+1:]
+
+	}
+	return requests, requests[len(requests)-1].Id
+
 }
 
 func (reqStorage RequestStorage) GetRequestById(reqId string) (Request, error) {
@@ -178,9 +207,9 @@ func (req *RequestRecord) ProcessRequest() (*http.Response, error) {
 	r.Header[http.HeaderOrderKey] = req.HeadersOrder
 	r.Header[http.PHeaderOrderKey] = req.PseudoHeadersOrder
 
-	req.StartTimestamp = time.Now().Unix()
+	req.StartTimestamp = time.Now().UnixNano()
 	resp, err := c.Do(r)
-	req.FinishTimestamp = time.Now().Unix()
+	req.FinishTimestamp = time.Now().UnixNano()
 	if err != nil {
 		return &emptyResp, fmt.Errorf("Error when processing request %s %s [%s]", req.Method, req.Url, req.HttpVersion)
 	}

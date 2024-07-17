@@ -76,6 +76,7 @@ func listenApiServer(addr string) {
 
 func listenWebApp(addr string) {
 	http.HandleFunc("/", web_app.HandleIndex)
+	http.HandleFunc("/requests_table", web_app.HandleRequestsTable)
 	log.Println("Starting web app server on addr", addr)
 	if err := http.ListenAndServe(addr, nil); err != nil {
 		log.Fatalln("Error starting web app:", err)
