@@ -3,6 +3,8 @@ package requests_storage
 import (
 	"bytes"
 	"fmt"
+	"log"
+	"net/url"
 	"sort"
 	"strings"
 	"sync"
@@ -73,6 +75,13 @@ type UnknownRecord struct {
 	Error              string
 }
 
+type SearchFilter struct {
+	Phrase        string
+	SearchUrl     bool
+	SearchHeaders bool
+	SearchBody    bool
+}
+
 func NewRequest() Request {
 	req := Request{}
 	req.Id = uuid.New().String()
@@ -96,12 +105,61 @@ func (reqStorage RequestStorage) AddRequestToStorage(req Request) error {
 	return nil
 }
 
-func (reqStorage RequestStorage) GetRequests() []Request {
-	requests, _ := reqStorage.GetRequestSinceId("")
+func (reqStorage RequestStorage) GetRequests(filter SearchFilter) []Request {
+	requests, _ := reqStorage.GetRequestSinceId("", filter)
 	return requests
 }
 
-func (reqStorage RequestStorage) GetRequestSinceId(lastId string) ([]Request, string) {
+func (reqStorage RequestStorage) applySearchFilter(requests []Request, filter SearchFilter) []Request {
+
+	if filter.Phrase == "" || (!filter.SearchBody && !filter.SearchHeaders && !filter.SearchUrl) {
+		return requests
+	}
+
+	filteredRequests := []Request{}
+
+	for _, request := range requests {
+		if filter.SearchUrl {
+			if !strings.Contains(string(request.Request.Url), filter.Phrase) {
+				continue
+			}
+		}
+
+		if filter.SearchBody {
+			if !strings.Contains(string(request.Request.Body), filter.Phrase) && !strings.Contains(string(request.Response.Body), filter.Phrase) {
+				continue
+			}
+		}
+
+		if filter.SearchHeaders {
+			if !reqStorage.headersConstainsSubstring(request.Request.Headers, filter.Phrase) && !reqStorage.headersConstainsSubstring(request.Response.Headers, filter.Phrase) {
+				continue
+			}
+		}
+
+		filteredRequests = append(filteredRequests, request)
+	}
+
+	return filteredRequests
+}
+
+func (reqStorage RequestStorage) headersConstainsSubstring(headers map[string][]string, subString string) bool {
+	for headerName, headerValues := range headers {
+		if strings.Contains(headerName, subString) {
+			return true
+		}
+
+		for _, headerValue := range headerValues {
+			if strings.Contains(headerValue, subString) {
+				return true
+			}
+		}
+	}
+
+	return false
+}
+
+func (reqStorage RequestStorage) GetRequestSinceId(lastId string, filter SearchFilter) ([]Request, string) {
 	requests := []Request{}
 	request := Request{}
 	i := 0
@@ -126,16 +184,20 @@ func (reqStorage RequestStorage) GetRequestSinceId(lastId string) ([]Request, st
 			if request.Id == lastId {
 				break
 			}
-		}
 
+		}
 		if len(requests) == (i + 1) {
 			return []Request{}, requests[len(requests)-1].Id
 		}
-
 		requests = requests[i+1:]
 
 	}
-	return requests, requests[len(requests)-1].Id
+
+	filteredRequests := reqStorage.applySearchFilter(requests, filter)
+	if len(filteredRequests) > 0 {
+		return filteredRequests, filteredRequests[len(filteredRequests)-1].Id
+	}
+	return filteredRequests, ""
 
 }
 
@@ -235,6 +297,35 @@ func (req *RequestRecord) GetCurlCommand() string {
 	}
 	builder.WriteString(fmt.Sprintf(" --%s", strings.ToLower(req.HttpVersion)))
 	return builder.String()
+}
+
+func (s *SearchFilter) formCheckboxToBool(value string) bool {
+	return value == "on"
+}
+
+func (s *SearchFilter) UpdateFilters(form *url.Values) error {
+	formValues := []string{"textFilter", "url", "headers", "body"}
+	for _, formValue := range formValues {
+		value := form.Get(formValue)
+		if value == "" {
+			continue
+		}
+
+		switch formValue {
+		case "textFilter":
+			s.Phrase = value
+
+		case "url":
+			s.SearchUrl = s.formCheckboxToBool(value)
+		case "headers":
+			s.SearchHeaders = s.formCheckboxToBool(value)
+		case "body":
+			s.SearchBody = s.formCheckboxToBool(value)
+		default:
+			log.Println("unknown value")
+		}
+	}
+	return nil
 }
 
 // func ResponseRecordFromResponse(res *Response) ResponseRecord {

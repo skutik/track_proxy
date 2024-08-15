@@ -15,7 +15,7 @@ type ApiError struct {
 }
 
 func GetRequests(c *gin.Context) {
-	requests := requests_storage.Storage.GetRequests()
+	requests := requests_storage.Storage.GetRequests(requests_storage.SearchFilter{})
 	log.Println("found requests in storage:", len(requests))
 	c.JSON(http.StatusOK, requests)
 }
