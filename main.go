@@ -2,7 +2,6 @@ package main
 
 import (
 	"log"
-	"net/http"
 	"track_proxy/api_handler"
 	"track_proxy/cert_handler"
 	"track_proxy/connection_handler"
@@ -75,12 +74,47 @@ func listenApiServer(addr string) {
 }
 
 func listenWebApp(addr string) {
-	http.HandleFunc("/", web_app.HandleIndex)
-	http.HandleFunc("/requests_table", web_app.HandleRequestsTable)
-	http.HandleFunc("/filter_requests", web_app.HandleFilterRequests)
+	// http.HandleFunc("/", web_app.HandleIndex)
+	// http.HandleFunc("/requests_table", web_app.HandleRequestsTable)
+	// http.HandleFunc("/filter_requests", web_app.HandleFilterRequests)
+	// log.Println("Starting web app server on addr", addr)
+	// if err := http.ListenAndServe(addr, nil); err != nil {
+	// 	log.Fatalln("Error starting web app:", err)
+	// }
+
+	router := gin.Default()
+
+	// router.LoadHTMLGlob("templates/*")
+	// router.GET("/", web_app.HandleIndex)
+
+	router.GET("/", func(c *gin.Context) {
+		router.LoadHTMLGlob("templates/*")
+		web_app.HandleIndex(c)
+	})
+
+	router.GET("/requests_table", func(c *gin.Context) {
+		router.LoadHTMLGlob("templates/*")
+		web_app.HandleRequestsTable(c)
+	})
+
+	router.GET("/request_detail/:requestId", func(c *gin.Context) {
+		router.LoadHTMLGlob("templates/*")
+		web_app.HandleRequestsTable(c)
+	})
+
+	router.POST("/filter_requests", func(c *gin.Context) {
+		router.LoadHTMLGlob("templates/*")
+		web_app.HandleFilterRequests(c)
+	})
+
+	router.GET("/register_request/:requestId", web_app.RegisterActiveRequest)
+	router.GET("/unregister_request", web_app.UnregisterActiveRequest)
+	router.GET("/curl", web_app.GetCurl)
 	log.Println("Starting web app server on addr", addr)
-	if err := http.ListenAndServe(addr, nil); err != nil {
-		log.Fatalln("Error starting web app:", err)
+
+	log.Println("Starting gin server on addr", addr)
+	if err := router.Run(addr); err != nil {
+		log.Fatalln("Error starting gin server:", err)
 	}
 }
 

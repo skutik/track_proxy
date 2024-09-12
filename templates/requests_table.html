@@ -1,6 +1,6 @@
 {{ block "table" . }}
     <div>
-        <table id="requests_table">
+        <table id="requests_table" class="table-primary">
             <thead>
                 <tr>
                     <th>Proto</th>
@@ -12,22 +12,7 @@
                     <th>Selected<th>
                 </tr>
             </thead>
-            <tbody hx-get="/requests_table" hx-swap="beforeend" hx-trigger="every 5s"></tbody>
+            <tbody hx-get="/requests_table" hx-swap="beforeend" hx-trigger="every 5s" id="tableContent"></tbody>
         </table>
     </div>
-{{ end }}
-
-{{ block "tableContent" .}}
-    {{ range . }}
-        <tr>
-            <td> {{ .Request.HttpVersion }} </td>
-            <td> {{ .Request.Method }}</td>
-            <td> {{ .Response.StatusCode }}</td>
-            <td> {{ .Request.Url }}</td>
-            <td> {{ .Id }}</td>
-            <td> {{ .Request.StartTimestamp }}</td>
-            <td> </td>
-        </tr>
-    {{ end }}
-
 {{ end }}

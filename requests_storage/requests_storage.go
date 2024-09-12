@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"log"
-	"net/url"
 	"sort"
 	"strings"
 	"sync"
@@ -12,6 +11,7 @@ import (
 	"track_proxy/client_hello"
 
 	http "github.com/bogdanfinn/fhttp"
+	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
@@ -295,7 +295,9 @@ func (req *RequestRecord) GetCurlCommand() string {
 	if len(req.Body) > 0 {
 		builder.WriteString(fmt.Sprintf(" --data '%s'", req.Body))
 	}
-	builder.WriteString(fmt.Sprintf(" --%s", strings.ToLower(req.HttpVersion)))
+
+	curlHttpVersion := strings.Replace(req.HttpVersion, "/", "", 1)
+	builder.WriteString(fmt.Sprintf(" --%s", strings.ToLower(curlHttpVersion)))
 	return builder.String()
 }
 
@@ -303,10 +305,18 @@ func (s *SearchFilter) formCheckboxToBool(value string) bool {
 	return value == "on"
 }
 
-func (s *SearchFilter) UpdateFilters(form *url.Values) error {
+func (s *SearchFilter) ResetFilter() {
+	s.Phrase = ""
+	s.SearchBody = false
+	s.SearchHeaders = false
+	s.SearchUrl = false
+}
+
+func (s *SearchFilter) UpdateFilters(c *gin.Context) error {
 	formValues := []string{"textFilter", "url", "headers", "body"}
+	s.ResetFilter()
 	for _, formValue := range formValues {
-		value := form.Get(formValue)
+		value := c.PostForm(formValue)
 		if value == "" {
 			continue
 		}
@@ -327,6 +337,32 @@ func (s *SearchFilter) UpdateFilters(form *url.Values) error {
 	}
 	return nil
 }
+
+// func (s *SearchFilter) UpdateFilters(form *url.Values) error {
+// 	formValues := []string{"textFilter", "url", "headers", "body"}
+// 	s.ResetFilter()
+// 	for _, formValue := range formValues {
+// 		value := form.Get(formValue)
+// 		if value == "" {
+// 			continue
+// 		}
+
+// 		switch formValue {
+// 		case "textFilter":
+// 			s.Phrase = value
+
+// 		case "url":
+// 			s.SearchUrl = s.formCheckboxToBool(value)
+// 		case "headers":
+// 			s.SearchHeaders = s.formCheckboxToBool(value)
+// 		case "body":
+// 			s.SearchBody = s.formCheckboxToBool(value)
+// 		default:
+// 			log.Println("unknown value")
+// 		}
+// 	}
+// 	return nil
+// }
 
 // func ResponseRecordFromResponse(res *Response) ResponseRecord {
 // 	responseRecord := ResponseRecord{}

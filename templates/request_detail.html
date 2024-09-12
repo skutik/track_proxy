@@ -1,0 +1,12 @@
+{{ block "requestDetail" . }}
+    Request
+    Headers:
+    <ul>
+    {{ range $headerName, $headerValues := .Request.Headers }}
+        {{ range $index, $headerValue := $headerValues }}
+        <li><b>{{ $headerName }}</b>: {{ $headerValue }}</li>
+    </ul>
+
+    {{ end }}
+
+{{ end }}

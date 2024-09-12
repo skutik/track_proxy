@@ -1,0 +1,15 @@
+{{ block "toolbar" . }}
+    <div>
+        <form hx-post="/filter_requests" hx-trigger="change from:input" hx-swap="innerHTML" hx-target="#tableContent">
+            <input type="text" id="url" name="textFilter"/>
+            <input type="checkbox" id="url" name="url" /><label for="url">URL</label>
+            <input type="checkbox" id="headers" name="headers"/><label for="headers">Headers</label>
+            <input type="checkbox" id="body" name="body"/><label for="body">Body</label>
+        </form>
+
+        <div>
+            <button hx-get="/curl" hx-swap="innerHTML" hx-target="#curlText" >Curl</button>
+            {{ template "curlToolbar" }}
+        </div>
+    </div>
+{{ end }}
