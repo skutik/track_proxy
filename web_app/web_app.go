@@ -1,6 +1,7 @@
 package web_app
 
 import (
+	"html/template"
 	"log"
 	"net/http"
 	"track_proxy/requests_storage"
@@ -11,6 +12,10 @@ import (
 var lastFetchedId = ""
 var activeRequestId = ""
 var activeFilter = requests_storage.SearchFilter{}
+
+var FuncMap = template.FuncMap{
+	"bytesToString": func(b []byte) string { return string(b) },
+}
 
 func HandleIndex(c *gin.Context) {
 	// tmpl, err := template.ParseFiles(
@@ -112,9 +117,13 @@ func RegisterActiveRequest(c *gin.Context) {
 	if requestId == "" {
 		c.Status(http.StatusInternalServerError)
 	}
-
 	activeRequestId = requestId
-	c.Status(http.StatusNoContent)
+	request, err := requests_storage.Storage.GetRequestById(requestId)
+	if err != nil {
+		log.Println("error when requesting detail for request", requestId, ":", err.Error())
+		c.Status(http.StatusBadRequest)
+	}
+	c.HTML(http.StatusOK, "request_detail.html", request)
 }
 
 func UnregisterActiveRequest(c *gin.Context) {

@@ -1,12 +1,29 @@
 {{ block "requestDetail" . }}
-    Request
-    Headers:
-    <ul>
-    {{ range $headerName, $headerValues := .Request.Headers }}
-        {{ range $index, $headerValue := $headerValues }}
-        <li><b>{{ $headerName }}</b>: {{ $headerValue }}</li>
-    </ul>
+    <div id="requestDetail">
+        Request
+        Headers:
+        <ul>
+        {{ range $headerName, $headerValues := .Request.Headers }}
+            {{ range $index, $headerValue := $headerValues }}
+                <li><b>{{ $headerName }}</b>: {{ $headerValue }}</li>
+            {{ end }}
+        {{ end }}
+        </ul>
 
-    {{ end }}
+        <div>
+            Client Hello:
+            {{ .Request.ClientHello }}
+        </div>
+        <div>
+        Request content:
+        {{ bytesToString .Request.Body }}
+        </div>
+        
+        <div>
+        Response content:
+        {{ bytesToString .Response.Body }}
+        </div>
+
+    </div>  
 
 {{ end }}

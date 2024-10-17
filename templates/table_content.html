@@ -1,6 +1,6 @@
 {{ block "tableContent" .}}
     {{ range . }}
-        <tr hx-get="/register_request/{{ .Id }}" hx-swap="none" hx-trigger="click">
+        <tr hx-get="/register_request/{{ .Id }}" hx-swap="innerHTML" hx-target="#requestDetail" hx-trigger="click">
             <td> {{ .Request.HttpVersion }} </td>
             <td> {{ .Request.Method }}</td>
             <td> {{ .Response.StatusCode }}</td>

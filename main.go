@@ -83,6 +83,7 @@ func listenWebApp(addr string) {
 	// }
 
 	router := gin.Default()
+	router.SetFuncMap(web_app.FuncMap)
 
 	// router.LoadHTMLGlob("templates/*")
 	// router.GET("/", web_app.HandleIndex)
