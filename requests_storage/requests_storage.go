@@ -21,6 +21,29 @@ var (
 )
 var Storage = make(RequestStorage)
 
+type RequestDetailType int
+
+const (
+	RequestType RequestDetailType = iota
+	ResponseType
+)
+
+var requestDetailTypeNaming = [...]string{"request", "response"}
+
+func (rdt RequestDetailType) String() string {
+	return requestDetailTypeNaming[rdt]
+}
+
+func GeRequestDetailTypeValue(detailType string) RequestDetailType {
+	detailType = strings.ToLower(detailType)
+	for idx, typeNaming := range requestDetailTypeNaming {
+		if typeNaming == detailType {
+			return RequestDetailType(idx)
+		}
+	}
+	return -1
+}
+
 type RequestStorage map[string]Request
 
 type RequestError struct{}

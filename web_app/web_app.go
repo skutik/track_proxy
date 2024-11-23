@@ -13,8 +13,13 @@ var lastFetchedId = ""
 var activeRequestId = ""
 var activeFilter = requests_storage.SearchFilter{}
 
+var defaultRequestDetailType = requests_storage.RequestType
 var FuncMap = template.FuncMap{
 	"bytesToString": func(b []byte) string { return string(b) },
+}
+
+type CurlResponse struct {
+	Curl string `json:"curl"`
 }
 
 func HandleIndex(c *gin.Context) {
@@ -123,7 +128,10 @@ func RegisterActiveRequest(c *gin.Context) {
 		log.Println("error when requesting detail for request", requestId, ":", err.Error())
 		c.Status(http.StatusBadRequest)
 	}
-	c.HTML(http.StatusOK, "request_detail.html", request)
+	c.HTML(http.StatusOK, "request_detail.html", gin.H{
+		"RequestRecord": request,
+		"DetailType":    defaultRequestDetailType.String(),
+	})
 }
 
 func UnregisterActiveRequest(c *gin.Context) {
@@ -147,7 +155,23 @@ func GetCurl(c *gin.Context) {
 		}
 	}
 
-	c.HTML(http.StatusOK, "curl_toolbar.html", gin.H{
-		"curlText": curlText,
-	})
+	c.JSON(http.StatusOK, CurlResponse{Curl: curlText})
+}
+
+func RegisterRequestDetailType(c *gin.Context) {
+	detailType := c.Param("detailType")
+
+	if detailType == "" {
+		c.Status(http.StatusBadRequest)
+		return
+	}
+
+	enumValue := requests_storage.GeRequestDetailTypeValue(detailType)
+	if enumValue == -1 {
+		c.Status(http.StatusBadRequest)
+		return
+	}
+
+	defaultRequestDetailType = enumValue
+	c.Status(http.StatusNoContent)
 }

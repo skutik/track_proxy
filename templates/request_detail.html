@@ -1,29 +1,46 @@
 {{ block "requestDetail" . }}
-    <div id="requestDetail">
-        Request
-        Headers:
-        <ul>
-        {{ range $headerName, $headerValues := .Request.Headers }}
-            {{ range $index, $headerValue := $headerValues }}
-                <li><b>{{ $headerName }}</b>: {{ $headerValue }}</li>
-            {{ end }}
-        {{ end }}
-        </ul>
+    <div id="requestRecordDetail">
+        <button hx-get="/register-request-detail/request" hx-swap="none" id="requestDetailTableButton" class="{{ if eq .DetailType "request" }}btn btn-primary active-record-detail{{ else }}btn btn-secondary inactive-record-detail{{ end }}" onclick="switchRecordDetailType('request')">Request</button>
+        <button hx-get="/register-request-detail/response" hx-swap="none" id="responseDetailTableButton" class="{{ if eq .DetailType "response" }}btn btn-primary active-record-detail{{ else }}btn btn-secondary inactive-record-detail{{ end }}" onclick="switchRecordDetailType('response')">Response</button>
 
-        <div>
-            Client Hello:
-            {{ .Request.ClientHello }}
+        <div id="requestDetail" class="{{ if eq .DetailType "request" }}visible active-record-detail{{ else }}invisible inactive-record-detail{{ end }}">
+        Headers:
+            <ul>
+            {{ range $headerName, $headerValues := .RequestRecord.Request.Headers }}
+                {{ range $index, $headerValue := $headerValues }}
+                    <li><b>{{ $headerName }}</b>: {{ $headerValue }}</li>
+                {{ end }}
+            {{ end }}
+            </ul>
+            <div>
+            Request content:
+            {{ bytesToString .RequestRecord.Request.Body }}
+            </div>
+            <div>
+                Client Hello:
+                {{ .RequestRecord.Request.ClientHello }}
+            </div>
+
         </div>
-        <div>
-        Request content:
-        {{ bytesToString .Request.Body }}
+        <div 
+            id="responseDetail" 
+            class="{{ if eq .DetailType "response" }}visible active-record-detail{{ else }}invisible inactive-record-detail{{ end }}"
+        >
+            Headers:
+            <ul>
+            {{ range $headerName, $headerValues := .RequestRecord.Response.Headers }}
+                {{ range $index, $headerValue := $headerValues }}
+                    <li><b>{{ $headerName }}</b>: {{ $headerValue }}</li>
+                {{ end }}
+            {{ end }}
+            </ul>
+
+            <div>
+            Response content:
+            {{ bytesToString .RequestRecord.Response.Body }}
+            </div>
         </div>
         
-        <div>
-        Response content:
-        {{ bytesToString .Response.Body }}
-        </div>
-
     </div>  
 
 {{ end }}

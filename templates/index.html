@@ -10,6 +10,14 @@
         .highlighted {
             background-color: navy;
         }
+
+        .visible {
+            display: block;
+        }
+
+        .invisible {
+            display: none;
+        }
     </style>
     <script>
         const rows = document.querySelectorAll('tbody tr');
@@ -27,26 +35,95 @@
 
         function attachListeners() {
             const rows = document.querySelectorAll('tbody tr');
-        rows.forEach(row => {
-            row.addEventListener('click', () => {
-                console.log("table clicked on")
-                // Remove the 'highlighted' class from all rows
-                rows.forEach(r => r.classList.remove('highlighted'));
-                
-                // Add the 'highlighted' class to the clicked row
-                row.classList.add('highlighted');
+            rows.forEach(row => {
+                row.addEventListener('click', () => {
+                    console.log("table clicked on")
+                    // Remove the 'highlighted' class from all rows
+                    rows.forEach(r => r.classList.remove('highlighted'));
+
+                    // Add the 'highlighted' class to the clicked row
+                    row.classList.add('highlighted');
+                });
             });
-        });
+        }
+
+        function curlToClipboard(event) {
+            if (event.detail.target.id === "curlText") {
+                const response = event.detail.xhr.responseText;
+                const resultInfoElement = document.getElementById("curlResult");
+                try {
+                    curlResponse = JSON.parse(response);
+                    if (curlResponse.curl) {
+                        navigator.clipboard.writeText(curlResponse.curl);
+                        resultInfoElement.textContent = "curl copied!"
+                        return
+                    } else {
+                        console.log("Unexpected curl format:", response);
+                    }
+                } catch(err) {
+                    console.error("Error when processing curl JSON:", err);
+                }
+            }
+
         }
 
         // Initial call to attach listeners to the existing content
         attachListeners();
 
         // Listen for HTMX content load and re-attach the event listeners
+        document.addEventListener('htmx:afterOnLoad', attachListeners);
         document.addEventListener('htmx:afterOnLoad', function(event) {
-            // Re-attach listeners after HTMX loads new content
-            attachListeners();
+            curlToClipboard(event);
         });
+
+
+
+        function replaceElementClasses(elements, classesToRemove, classesToAdd) {
+            elements.forEach(elem => {
+                classesToRemove.forEach(_class => {
+                    if (elem.tagName === "BUTTON" && _class.startsWith("visible")) {
+                        return;
+                    }
+                    elem.classList.remove(_class);
+                });
+                classesToAdd.forEach(_class => {
+                    if (elem.tagName !== "BUTTON" && _class.startsWith("btn")) {
+                        return;
+                    }
+
+                    if (elem.tagName === "BUTTON" && _class.startsWith("invisible")) {
+                        return;
+                    }
+
+                    elem.classList.add(_class);
+                });
+            });
+        }
+
+        function switchRecordDetailType(recordDetailType) {
+            if (recordDetailType !== "request" && recordDetailType !== "response") {
+                return;
+            };
+
+
+            const activeSelectorClass = 'active-record-detail';
+            const inactiveSelectorClass = 'inactive-record-detail';
+            const allActiveClasses = [activeSelectorClass, "visible", "btn", "btn-primary"];
+            const allInactiveClasses = [inactiveSelectorClass, "invisible", "btn", "btn-secondary"];
+            const activeElements = document.querySelectorAll(`.${activeSelectorClass}`);
+            const inactiveElements = document.querySelectorAll(`.${inactiveSelectorClass}`);
+            
+            activeElements.forEach(elem => {
+                if (elem.id.includes(recordDetailType)) {
+                    return;
+                }
+            });
+            
+            replaceElementClasses(activeElements, allActiveClasses, allInactiveClasses);
+            replaceElementClasses(inactiveElements, allInactiveClasses, allActiveClasses);
+        }
+
+
     </script>
 
 </head>

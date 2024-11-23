@@ -98,7 +98,7 @@ func listenWebApp(addr string) {
 		web_app.HandleRequestsTable(c)
 	})
 
-	router.GET("/request_detail/:requestId", func(c *gin.Context) {
+	router.GET("/request-detail/:requestId", func(c *gin.Context) {
 		router.LoadHTMLGlob("templates/*")
 		web_app.HandleRequestsTable(c)
 	})
@@ -108,9 +108,10 @@ func listenWebApp(addr string) {
 		web_app.HandleFilterRequests(c)
 	})
 
-	router.GET("/register_request/:requestId", web_app.RegisterActiveRequest)
-	router.GET("/unregister_request", web_app.UnregisterActiveRequest)
+	router.GET("/register-request/:requestId", web_app.RegisterActiveRequest)
+	router.GET("/unregister-request", web_app.UnregisterActiveRequest)
 	router.GET("/curl", web_app.GetCurl)
+	router.GET("/register-request-detail/:detailType", web_app.RegisterRequestDetailType)
 	log.Println("Starting web app server on addr", addr)
 
 	log.Println("Starting gin server on addr", addr)
